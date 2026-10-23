@@ -1,7 +1,6 @@
-// Cria o pagamento no Mercado Pago a partir dos dados do Payment Brick.
-// O valor é fixo aqui no servidor, para ninguém conseguir alterar pelo navegador.
-const PRECO = 397;
-const DESCRICAO = "Mentoria de IA - Turma fundadora";
+// Cria a order no Mercado Pago (API de Orders) a partir dos dados do Payment Brick.
+// O valor fica fixo aqui no servidor, para ninguém conseguir alterar pelo navegador.
+const PRECO = "397.00";
 
 export default async (req) => {
   if (req.method !== "POST") return new Response("Método não permitido", { status: 405 });
@@ -12,30 +11,31 @@ export default async (req) => {
   try { dados = await req.json(); } catch { return Response.json({ erro: "Dados inválidos" }, { status: 400 }); }
   const f = dados.formData || {};
   const aluno = dados.aluno || {};
+  const tipo = f.payment_type_id || (f.payment_method_id === "pix" ? "bank_transfer" : "credit_card");
+
+  const pagamento = { amount: PRECO, payment_method: { id: f.payment_method_id, type: tipo } };
+  if (tipo === "bank_transfer") {
+    pagamento.expiration_time = "PT30M";
+  } else {
+    pagamento.payment_method.token = f.token;
+    pagamento.payment_method.installments = Math.min(Math.max(Number(f.installments) || 1, 1), 3);
+  }
+
+  const payer = { email: f.payer?.email };
+  if (f.payer?.identification?.number) payer.identification = f.payer.identification;
+  if (aluno.nome) { const [n, ...s] = String(aluno.nome).trim().split(/\s+/); payer.first_name = n; if (s.length) payer.last_name = s.join(" "); }
 
   const corpo = {
-    transaction_amount: PRECO,
-    description: DESCRICAO,
-    payment_method_id: f.payment_method_id,
-    payer: {
-      email: f.payer?.email,
-      identification: f.payer?.identification,
-      first_name: (aluno.nome || "").split(" ")[0] || undefined,
-    },
-    metadata: { nome: aluno.nome, whatsapp: aluno.whatsapp, profissao: aluno.profissao },
-    external_reference: "mentoria-fundadora",
-    statement_descriptor: "LEOMASSRI",
+    type: "online",
+    processing_mode: "automatic",
+    total_amount: PRECO,
+    external_reference: "mentoria-fundadora-" + Date.now(),
+    description: "Mentoria de IA - Turma fundadora",
+    payer,
+    transactions: { payments: [pagamento] },
   };
-  if (f.token) {
-    corpo.token = f.token;
-    corpo.installments = Math.min(Number(f.installments) || 1, 3);
-    if (f.issuer_id) corpo.issuer_id = f.issuer_id;
-  }
-  if (f.payment_method_id === "pix") {
-    corpo.date_of_expiration = new Date(Date.now() + 30 * 60 * 1000).toISOString().replace("Z", "-00:00");
-  }
 
-  const r = await fetch("https://api.mercadopago.com/v1/payments", {
+  const r = await fetch("https://api.mercadopago.com/v1/orders", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -44,14 +44,19 @@ export default async (req) => {
     },
     body: JSON.stringify(corpo),
   });
-  const p = await r.json();
-  if (!r.ok) return Response.json({ erro: p.message || "Pagamento recusado", detalhe: p.cause }, { status: 400 });
-
-  const tx = p.point_of_interaction?.transaction_data || {};
+  const o = await r.json().catch(() => ({}));
+  const p = o.transactions?.payments?.[0] || {};
+  if (!r.ok) {
+    const msg = o.errors?.[0]?.message || o.message || p.status_detail || "Pagamento recusado";
+    console.log("orders error", r.status, JSON.stringify(o).slice(0, 800));
+    return Response.json({ erro: msg }, { status: 400 });
+  }
+  const pm = p.payment_method || {};
   return Response.json({
-    id: p.id,
-    status: p.status,
-    detalhe: p.status_detail,
-    pix: tx.qr_code ? { codigo: tx.qr_code, imagem: tx.qr_code_base64 } : null,
+    id: o.id,
+    status: o.status,
+    detalhe: o.status_detail,
+    aprovado: o.status === "processed" || p.status === "processed",
+    pix: pm.qr_code ? { codigo: pm.qr_code, imagem: pm.qr_code_base64, link: pm.ticket_url } : null,
   });
 };

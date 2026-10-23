@@ -879,7 +879,7 @@ footer .in{display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px 24
         <li><span class="lab">Investimento</span><strong><s>R$ 570</s> R$ 397</strong><small>no Pix ou em 3x sem juros</small></li>
       </ul>
       <div class="fwrap" id="f-mentoria">
-        <form class="fcard" name="mentoria" method="POST" data-netlify="true" netlify-honeypot="bot-field" data-pay="https://mpago.li/2Cc2UJR" data-pk="">
+        <form class="fcard" name="mentoria" method="POST" data-netlify="true" netlify-honeypot="bot-field" data-pay="https://mpago.li/2Cc2UJR" data-pk="APP_USR-922b439d-f09b-4232-bfb4-efc02b6fbeda">
           <input type="hidden" name="form-name" value="mentoria">
           <p class="hp"><label>Não preencha <input name="bot-field"></label></p>
           <div class="fhead"><span class="lab">Turma fundadora · 15 vagas</span><strong>Garanta sua vaga</strong><p>Leva menos de 1 minuto. Depois dos dados, você segue para o pagamento seguro no Mercado Pago.</p></div>
@@ -1203,17 +1203,18 @@ window.startPayment=function(form,pk,fallback){
             return fetch('/.netlify/functions/pagamento',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({formData:d.formData,aluno:aluno})})
               .then(function(r){return r.json();})
               .then(function(p){
+                if(p.erro==='Pagamento não configurado'){ goFallback(); return; }
                 if(p.erro){ showErr('Pagamento não concluído: '+p.erro+'. Confira os dados ou tente outro meio.'); throw new Error(p.erro); }
-                if(p.status==='approved') return done();
+                if(p.aprovado) return done();
                 if(p.pix){
                   var px=box.querySelector('.pixbox'); px.hidden=false; document.getElementById('mp-brick').hidden=true;
                   px.querySelector('.pixqr').src='data:image/png;base64,'+p.pix.imagem;
                   var inp=px.querySelector('.pixcode'); inp.value=p.pix.codigo;
                   px.querySelector('.pixbtn').onclick=function(){ inp.select(); try{navigator.clipboard.writeText(p.pix.codigo);}catch(e){document.execCommand('copy');} this.textContent='Copiado'; };
-                  var n=0, iv=setInterval(function(){ if(++n>360){clearInterval(iv);return;} fetch('/.netlify/functions/status?id='+p.id).then(function(r){return r.json();}).then(function(q){ if(q.status==='approved'){clearInterval(iv);done();} }); },5000);
+                  var n=0, iv=setInterval(function(){ if(++n>360){clearInterval(iv);return;} fetch('/.netlify/functions/status?id='+p.id).then(function(r){return r.json();}).then(function(q){ if(q.aprovado){clearInterval(iv);done();} }); },5000);
                   return;
                 }
-                if(p.status==='in_process'||p.status==='pending'){ showErr('Pagamento em análise. Você recebe a confirmação por e-mail do Mercado Pago.'); return; }
+                if(p.status==='processing'||p.status==='action_required'){ showErr('Pagamento em análise. Você recebe a confirmação por e-mail do Mercado Pago.'); return; }
                 showErr('Pagamento recusado pelo banco. Tente outro cartão ou o Pix.'); throw new Error('rejected');
               });
           }
