@@ -4,3 +4,15 @@
 
 [functions]
   node_bundler = "esbuild"
+
+[[redirects]]
+  from = "https://www.leomassri.com.br/*"
+  to = "https://leomassri.com.br/:splat"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "http://www.leomassri.com.br/*"
+  to = "https://leomassri.com.br/:splat"
+  status = 301
+  force = true
