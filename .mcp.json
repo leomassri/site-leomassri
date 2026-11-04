@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "kairogen": {
+      "type": "http",
+      "url": "https://mcp.kairogen.ai/mcp"
+    }
+  }
+}
